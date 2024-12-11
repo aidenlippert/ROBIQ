@@ -26,7 +26,7 @@ class PoseTracker:
         # Activity recognition and biomechanics components
         self.activity_recognizer = ActivityRecognizer(activity_model_path)
         self.pose_similarity_model = PoseSimilarityModel()
-        self.depth_estimator = DepthEstimator()
+        self.depth_estimator = DepthEstimator()  # Using MiDaS for depth estimation
         self.joint_angles_calculator = JointAnglesCalculator()
         self.motion_analyzer = MotionAnalyzer(window_size=5)
         self.com_estimator = CenterOfMassEstimator()
