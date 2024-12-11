@@ -1,5 +1,3 @@
-Here’s your rewritten PoseTracker class, incorporating all of the enhanced features like Real-Time Exercise Auto-Correction, Adaptive AI-Coach, Predictive Injury Prevention, and others:
-
 from biomechanics.joint_angles import JointAnglesCalculator
 from biomechanics.motion_analysis import MotionAnalyzer
 from biomechanics.center_of_mass import CenterOfMassEstimator
