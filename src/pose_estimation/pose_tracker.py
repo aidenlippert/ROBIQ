@@ -44,6 +44,7 @@ class PoseTracker:
         self.rom_status = 'white'
         self.rep_started = False
         self.previous_activity = None  # Track recognized activities
+        self.similarity_threshold = 80  # Threshold for triggering feedback (percentage)
 
     def update_exercise(self, exercise_type, skill_level):
         self.exercise_type = exercise_type
@@ -82,21 +83,28 @@ class PoseTracker:
 
             # Step 7: Pose similarity scoring (auto-correction)
             similarity_score, correction_data = self.pose_similarity_model.compare(smoothed_landmarks)
-            annotated_image = draw_auto_corrections(annotated_image, correction_data)
-            annotated_image = draw_pose_accuracy_overlay(annotated_image, similarity_score)
+            
+            # Only proceed with corrections if similarity score is above the threshold
+            if similarity_score >= self.similarity_threshold:
+                annotated_image = draw_auto_corrections(annotated_image, correction_data)
+                annotated_image = draw_pose_accuracy_overlay(annotated_image, similarity_score)
 
-            # Step 8: Injury risk analysis
-            overuse_joints = self.injury_analyzer.analyze_joint_stress(joint_angles)
-            if overuse_joints:
-                print(f"Warning: Overuse detected in {overuse_joints}")
+                # Step 8: Injury risk analysis
+                overuse_joints = self.injury_analyzer.analyze_joint_stress(joint_angles)
+                if overuse_joints:
+                    print(f"Warning: Overuse detected in {overuse_joints}")
 
-            # Step 9: Adaptive Coaching
-            feedback_message = self.coach.adjust_workout(similarity_score, self.rep_count)
-            print(feedback_message)
+                # Step 9: Adaptive Coaching
+                feedback_message = self.coach.adjust_workout(similarity_score, self.rep_count)
+                print(feedback_message)
 
-            # Step 10: Audio feedback for corrections
-            if similarity_score < 70:
-                self.audio_feedback.provide_correction("Please adjust your posture!")
+                # Step 10: Audio feedback for corrections
+                if similarity_score < 70:
+                    self.audio_feedback.provide_correction("Please adjust your posture!")
+
+            else:
+                # If accuracy is too low, suppress corrections and feedback
+                feedback_message = "Pose accuracy too low for feedback."
 
             return annotated_image, joint_angles, self.rom_status, self.rep_count, activity, feedback_message
         else:
