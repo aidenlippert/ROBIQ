@@ -1,3 +1,5 @@
+Here’s your rewritten PoseTracker class, incorporating all of the enhanced features like Real-Time Exercise Auto-Correction, Adaptive AI-Coach, Predictive Injury Prevention, and others:
+
 from biomechanics.joint_angles import JointAnglesCalculator
 from biomechanics.motion_analysis import MotionAnalyzer
 from biomechanics.center_of_mass import CenterOfMassEstimator
@@ -8,6 +10,11 @@ from pose_estimation.pose_refinement import PoseRefiner
 from pose_estimation.activity_recognition import ActivityRecognizer
 from pose_estimation.pose_similarity import PoseSimilarity
 from pose_estimation.depth_estimation import DepthEstimator
+from utils.visualization_utils import draw_auto_corrections, draw_pose_accuracy_overlay
+from biomechanics.pose_similarity import PoseSimilarityModel
+from feedback.audio_feedback import AudioFeedback
+from feedback.adaptive_coach import AdaptiveCoach
+from biomechanics.injury_risk import InjuryRiskAnalyzer
 import cv2
 import numpy as np
 
@@ -20,12 +27,17 @@ class PoseTracker:
 
         # Activity recognition and biomechanics components
         self.activity_recognizer = ActivityRecognizer(activity_model_path)
-        self.pose_similarity = PoseSimilarity()
+        self.pose_similarity_model = PoseSimilarityModel()
         self.depth_estimator = DepthEstimator()
         self.joint_angles_calculator = JointAnglesCalculator()
         self.motion_analyzer = MotionAnalyzer(window_size=5)
         self.com_estimator = CenterOfMassEstimator()
         self.symmetry_analyzer = SymmetryAnalyzer()
+
+        # Feedback and coaching components
+        self.audio_feedback = AudioFeedback()
+        self.coach = AdaptiveCoach()
+        self.injury_analyzer = InjuryRiskAnalyzer()
 
         # State variables
         self.exercise_type = 'all'  # Default: calculate all joints
@@ -58,7 +70,7 @@ class PoseTracker:
 
             # Step 4: Draw landmarks
             annotated_image = self._draw_landmarks(frame, refined_landmarks)
-            
+
             # Step 5: Joint angle calculations
             joint_angles = self.joint_angles_calculator.get_joint_angles(refined_landmarks, self.exercise_type)
             self.update_rom_status_and_rep_count(joint_angles)
@@ -70,11 +82,29 @@ class PoseTracker:
                 print(f"Detected Activity: {activity}")
                 self.previous_activity = activity
 
-            return annotated_image, joint_angles, self.rom_status, self.rep_count, activity
+            # Step 7: Pose similarity scoring (auto-correction)
+            similarity_score, correction_data = self.pose_similarity_model.compare(smoothed_landmarks)
+            annotated_image = draw_auto_corrections(annotated_image, correction_data)
+            annotated_image = draw_pose_accuracy_overlay(annotated_image, similarity_score)
+
+            # Step 8: Injury risk analysis
+            overuse_joints = self.injury_analyzer.analyze_joint_stress(joint_angles)
+            if overuse_joints:
+                print(f"Warning: Overuse detected in {overuse_joints}")
+
+            # Step 9: Adaptive Coaching
+            feedback_message = self.coach.adjust_workout(similarity_score, self.rep_count)
+            print(feedback_message)
+
+            # Step 10: Audio feedback for corrections
+            if similarity_score < 70:
+                self.audio_feedback.provide_correction("Please adjust your posture!")
+
+            return annotated_image, joint_angles, self.rom_status, self.rep_count, activity, feedback_message
         else:
             # No landmarks detected
             self.rom_status = 'white'
-            return frame, {}, self.rom_status, self.rep_count, None
+            return frame, {}, self.rom_status, self.rep_count, None, None
 
     def update_rom_status_and_rep_count(self, joint_angles):
         """
@@ -100,6 +130,9 @@ class PoseTracker:
                 self.rom_status = 'white'
 
     def _draw_landmarks(self, frame, landmarks):
+        """
+        Draw pose landmarks on the frame.
+        """
         for idx, landmark in enumerate(landmarks):
             x = int(landmark.x * frame.shape[1])
             y = int(landmark.y * frame.shape[0])
