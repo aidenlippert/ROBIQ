@@ -21,7 +21,7 @@ class JointAnglesCalculator:
         self.visibility_threshold = 0.2
 
     def calculate_angle(self, a, b, c):
-        """Calculate the angle at point b formed by points a, b, and c."""
+        """Calculate the angle at point b formed by points a, b, and c in 3D space."""
         a = np.array(a)
         b = np.array(b)
         c = np.array(c)
@@ -46,44 +46,45 @@ class JointAnglesCalculator:
         joints = {}
 
         if exercise_type in ['pushup', 'all']:
-            # Calculate elbow angles
+            # Calculate elbow angles using 3D coordinates
             joints['left_elbow'] = self.calculate_joint_angle(landmarks, 'left_shoulder', 'left_elbow', 'left_wrist')
             joints['right_elbow'] = self.calculate_joint_angle(landmarks, 'right_shoulder', 'right_elbow', 'right_wrist')
 
         if exercise_type in ['squat', 'lunge', 'all']:
-            # Calculate knee angles
+            # Calculate knee angles using 3D coordinates
             joints['left_knee'] = self.calculate_joint_angle(landmarks, 'left_hip', 'left_knee', 'left_ankle')
             joints['right_knee'] = self.calculate_joint_angle(landmarks, 'right_hip', 'right_knee', 'right_ankle')
 
         return joints
 
-def calculate_joint_angle(self, landmarks, point_a_name, point_b_name, point_c_name):
-    lm = self.landmark_indices
-    try:
-        point_a = landmarks[lm[point_a_name]]
-        point_b = landmarks[lm[point_b_name]]
-        point_c = landmarks[lm[point_c_name]]
+    def calculate_joint_angle(self, landmarks, point_a_name, point_b_name, point_c_name):
+        lm = self.landmark_indices
+        try:
+            point_a = landmarks[lm[point_a_name]]
+            point_b = landmarks[lm[point_b_name]]
+            point_c = landmarks[lm[point_c_name]]
 
-        # Debug prints for visibility
-        print(f'Calculating angle for {point_b_name}')
-        print(f'{point_a_name} visibility: {point_a.visibility}')
-        print(f'{point_b_name} visibility: {point_b.visibility}')
-        print(f'{point_c_name} visibility: {point_c.visibility}')
+            # Debug prints for visibility
+            print(f'Calculating angle for {point_b_name}')
+            print(f'{point_a_name} visibility: {point_a.visibility}')
+            print(f'{point_b_name} visibility: {point_b.visibility}')
+            print(f'{point_c_name} visibility: {point_c.visibility}')
 
-        # Check landmarks visibility
-        if not (self.is_landmark_visible(point_a) and
-                self.is_landmark_visible(point_b) and
-                self.is_landmark_visible(point_c)):
-            print(f'One or more landmarks not visible for {point_b_name}')
+            # Check landmarks visibility
+            if not (self.is_landmark_visible(point_a) and
+                    self.is_landmark_visible(point_b) and
+                    self.is_landmark_visible(point_c)):
+                print(f'One or more landmarks not visible for {point_b_name}')
+                return None
+
+            # Use 3D coordinates (x, y, z)
+            angle = self.calculate_angle(
+                (point_a.x, point_a.y, point_a.z),
+                (point_b.x, point_b.y, point_b.z),
+                (point_c.x, point_c.y, point_c.z)
+            )
+            print(f'Angle for {point_b_name}: {angle}')
+            return angle
+        except (IndexError, AttributeError) as e:
+            print(f'Error calculating angle for {point_b_name}: {e}')
             return None
-
-        angle = self.calculate_angle(
-            (point_a.x, point_a.y, point_a.z),
-            (point_b.x, point_b.y, point_b.z),
-            (point_c.x, point_c.y, point_c.z)
-        )
-        print(f'Angle for {point_b_name}: {angle}')
-        return angle
-    except (IndexError, AttributeError) as e:
-        print(f'Error calculating angle for {point_b_name}: {e}')
-        return None
