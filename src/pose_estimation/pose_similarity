@@ -1,0 +1,40 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class PoseSimilarityModel(nn.Module):
+    def __init__(self, input_size=68):
+        super(PoseSimilarityModel, self).__init__()
+        self.fc = nn.Sequential(
+            nn.Linear(input_size, 128),
+            nn.ReLU(),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32)
+        )
+
+    def forward(self, x):
+        return self.fc(x)
+
+class PoseSimilarity:
+    def __init__(self, model_path=None):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = PoseSimilarityModel().to(self.device)
+        if model_path:
+            self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+            self.model.eval()
+
+    def compute_similarity(self, pose1, pose2):
+        """
+        Input:
+            - pose1, pose2: Arrays of keypoints (68-dimensional)
+        Returns:
+            - Cosine similarity score
+        """
+        pose1_tensor = torch.tensor(pose1, dtype=torch.float32).unsqueeze(0).to(self.device)
+        pose2_tensor = torch.tensor(pose2, dtype=torch.float32).unsqueeze(0).to(self.device)
+        with torch.no_grad():
+            emb1 = self.model(pose1_tensor)
+            emb2 = self.model(pose2_tensor)
+        similarity = F.cosine_similarity(emb1, emb2)
+        return similarity.item()
