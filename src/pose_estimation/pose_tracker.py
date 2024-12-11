@@ -147,6 +147,24 @@ class PoseTracker:
                     self.rep_started = True
             else:
                 self.rom_status = 'white'
+        elif self.exercise_type == 'push_up':
+            elbow_angle = joint_angles.get('left_elbow')
+            if elbow_angle is not None:
+                if elbow_angle > 160:
+                    self.rom_status = 'white'
+                    if self.rep_started:
+                        self.rep_count += 1
+                        self.rep_started = False
+                elif 140 < elbow_angle <= 160:
+                    self.rom_status = 'yellow'
+                elif 90 < elbow_angle <= 140:
+                    self.rom_status = 'light_green'
+                elif elbow_angle <= 90:
+                    self.rom_status = 'dark_green'
+                    self.rep_started = True
+            else:
+                self.rom_status = 'white'
+        # Additional exercises can be added here with similar logic
 
     def _draw_landmarks(self, frame, landmarks):
         """
@@ -170,3 +188,27 @@ class PoseTracker:
             y = int(landmark.y * frame.shape[0])
             cv2.circle(heatmap, (x, y), 10, 255, -1)
         return heatmap
+
+    def perform_data_augmentation(self, frame):
+        """
+        Data augmentation methods such as rotation, flipping, and random scaling
+        to enhance the activity recognition model's robustness to various conditions.
+        """
+        augmentations = []
+        # Horizontal flip
+        flipped = cv2.flip(frame, 1)
+        augmentations.append(flipped)
+
+        # Random rotation
+        angle = np.random.randint(-15, 15)
+        center = (frame.shape[1] // 2, frame.shape[0] // 2)
+        rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1)
+        rotated = cv2.warpAffine(frame, rotation_matrix, (frame.shape[1], frame.shape[0]))
+        augmentations.append(rotated)
+
+        # Random scaling
+        scale_factor = np.random.uniform(0.8, 1.2)
+        scaled = cv2.resize(frame, None, fx=scale_factor, fy=scale_factor)
+        augmentations.append(scaled)
+
+        return augmentations
