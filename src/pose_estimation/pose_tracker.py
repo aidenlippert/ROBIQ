@@ -1,3 +1,7 @@
+import cv2
+import numpy as np
+import torch
+from torchvision.transforms import Compose, ToTensor, Resize
 from biomechanics.joint_angles import JointAnglesCalculator
 from biomechanics.motion_analysis import MotionAnalyzer
 from biomechanics.center_of_mass import CenterOfMassEstimator
@@ -13,8 +17,6 @@ from biomechanics.pose_similarity import PoseSimilarityModel
 from feedback.audio_feedback import AudioFeedback
 from feedback.adaptive_coach import AdaptiveCoach
 from biomechanics.injury_risk import InjuryRiskAnalyzer
-import cv2
-import numpy as np
 
 class PoseTracker:
     def __init__(self, activity_model_path=None, pose_refinement_model_path=None):
@@ -26,7 +28,7 @@ class PoseTracker:
         # Activity recognition and biomechanics components
         self.activity_recognizer = ActivityRecognizer(activity_model_path)
         self.pose_similarity_model = PoseSimilarityModel()
-        self.depth_estimator = DepthEstimator()  # Using MiDaS for depth estimation
+        self.depth_estimator = DepthEstimator()
         self.joint_angles_calculator = JointAnglesCalculator()
         self.motion_analyzer = MotionAnalyzer(window_size=5)
         self.com_estimator = CenterOfMassEstimator()
@@ -55,33 +57,36 @@ class PoseTracker:
         print(f"Exercise updated: {exercise_type}, Skill level: {skill_level}")
 
     def process_frame(self, frame):
-        # Step 1: Pose estimation
+        # Step 1: Preprocess frame for lighting adjustments
+        frame = self.preprocess_lighting(frame)
+
+        # Step 2: Pose estimation
         results = self.pose_estimator.process_frame(frame)
 
         if results.pose_landmarks:
-            # Step 2: Pose refinement
+            # Step 3: Pose refinement
             landmarks = results.pose_landmarks.landmark
             smoothed_landmarks = self.temporal_smoother.smooth_landmarks(landmarks)
             refined_landmarks = self.pose_refiner.refine_pose(self._generate_heatmap(frame, smoothed_landmarks))
 
-            # Step 3: Depth estimation
+            # Step 4: Depth estimation
             depth_map = self.depth_estimator.estimate_depth(frame)
 
-            # Step 4: Draw landmarks
+            # Step 5: Draw landmarks
             annotated_image = self._draw_landmarks(frame, refined_landmarks)
 
-            # Step 5: Joint angle calculations
+            # Step 6: Joint angle calculations
             joint_angles = self.joint_angles_calculator.get_joint_angles(refined_landmarks, self.exercise_type)
             self.update_rom_status_and_rep_count(joint_angles)
 
-            # Step 6: Activity recognition
+            # Step 7: Activity recognition
             keypoints_sequence = np.array([[lm.x, lm.y] for lm in refined_landmarks]).flatten()
             activity = self.activity_recognizer.predict_activity([keypoints_sequence])
             if activity != self.previous_activity:
                 print(f"Detected Activity: {activity}")
                 self.previous_activity = activity
 
-            # Step 7: Pose similarity scoring (auto-correction)
+            # Step 8: Pose similarity scoring (auto-correction)
             similarity_score, correction_data = self.pose_similarity_model.compare(smoothed_landmarks)
             
             # Only proceed with corrections if similarity score is above the threshold
@@ -89,28 +94,36 @@ class PoseTracker:
                 annotated_image = draw_auto_corrections(annotated_image, correction_data)
                 annotated_image = draw_pose_accuracy_overlay(annotated_image, similarity_score)
 
-                # Step 8: Injury risk analysis
+                # Step 9: Injury risk analysis
                 overuse_joints = self.injury_analyzer.analyze_joint_stress(joint_angles)
                 if overuse_joints:
                     print(f"Warning: Overuse detected in {overuse_joints}")
 
-                # Step 9: Adaptive Coaching
+                # Step 10: Adaptive Coaching
                 feedback_message = self.coach.adjust_workout(similarity_score, self.rep_count)
                 print(feedback_message)
 
-                # Step 10: Audio feedback for corrections
+                # Step 11: Audio feedback for corrections
                 if similarity_score < 70:
                     self.audio_feedback.provide_correction("Please adjust your posture!")
 
             else:
-                # If accuracy is too low, suppress corrections and feedback
                 feedback_message = "Pose accuracy too low for feedback."
 
             return annotated_image, joint_angles, self.rom_status, self.rep_count, activity, feedback_message
         else:
-            # No landmarks detected
             self.rom_status = 'white'
             return frame, {}, self.rom_status, self.rep_count, None, None
+
+    def preprocess_lighting(self, frame):
+        """
+        Apply histogram equalization to improve image lighting.
+        """
+        if len(frame.shape) == 3 and frame.shape[2] == 3:  # Check if it's a color image
+            frame_yuv = cv2.cvtColor(frame, cv2.COLOR_BGR2YUV)
+            frame_yuv[:, :, 0] = cv2.equalizeHist(frame_yuv[:, :, 0])  # Equalize the Y channel
+            frame = cv2.cvtColor(frame_yuv, cv2.COLOR_YUV2BGR)
+        return frame
 
     def update_rom_status_and_rep_count(self, joint_angles):
         """
