@@ -1,4 +1,3 @@
-import sys
 import cv2
 from PyQt5.QtWidgets import QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
@@ -7,50 +6,21 @@ from .exercise_selection import ExerciseSelectionWidget
 from .settings import SettingsDialog
 from .metrics_display import MetricsDisplayWidget
 from pose_estimation.pose_tracker import PoseTracker
-
-class VideoThread(QThread):
-    frame_updated = pyqtSignal(QImage)
-
-    def __init__(self, pose_tracker):
-        super().__init__()
-        self.pose_tracker = pose_tracker
-        self.running = True
-
-    def run(self):
-        # Check if the camera is available before starting video capture
-        cap = self.pose_tracker.cap
-        if not cap.isOpened():
-            print("Error: Camera not found!")
-            return
-
-        while self.running and cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                print("Error: Failed to read frame!")
-                break
-            frame = self.pose_tracker.process_frame(frame)
-
-            # Convert frame to QImage for display in Qt
-            rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            h, w, ch = rgb_image.shape
-            bytes_per_line = ch * w
-            qt_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
-            self.frame_updated.emit(qt_image)
-
-    def stop(self):
-        self.running = False
-        self.pose_tracker.release_resources()  # Ensure pose tracker resources are released
-        self.quit()
-        self.wait()
+from biomechanics.symmetry_analysis import SymmetryAnalyzer
+from biomechanics.joint_angles import JointAnglesCalculator
+from biomechanics.motion_analysis import MotionAnalyzer
+from biomechanics.center_of_mass import CenterOfMassEstimator
+from pose_estimation.mediapipe_blazepose import BlazePoseEstimator
+from pose_estimation.temporal_smoothing import TemporalSmoothing
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('FitWizard - AI Personal Trainer')
-        self.setGeometry(100, 100, 1200, 800)
+        self.setWindowTitle('ROBIQ - AI Personal Trainer')
+        self.setGeometry(100, 100, 1200, 200)  # Make the window wider and less tall
 
-        # Initialize pose tracker (with a default video source)
-        self.pose_tracker = PoseTracker(video_source=0)
+        # Initialize pose tracker
+        self.pose_tracker = PoseTracker()
 
         # Initialize UI components
         self.init_ui()
@@ -58,6 +28,9 @@ class MainWindow(QMainWindow):
         # Initialize video thread
         self.video_thread = VideoThread(self.pose_tracker)
         self.video_thread.frame_updated.connect(self.update_video_frame)
+        self.video_thread.joint_angles_updated.connect(self.update_joint_angles)
+        self.video_thread.rom_status_updated.connect(self.update_rom_status)
+        self.video_thread.rep_count_updated.connect(self.update_rep_count)
 
     def init_ui(self):
         # Central widget
@@ -71,9 +44,27 @@ class MainWindow(QMainWindow):
 
         # Video display area
         self.video_label = QLabel()
-        self.video_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.video_label.setFixedSize(350, 350)  # Set to a square size
+        self.video_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.video_label.setAlignment(Qt.AlignCenter)
         video_layout.addWidget(self.video_label)
+
+        # Joint angles display area
+        self.joint_angles_label = QLabel()
+        self.joint_angles_label.setAlignment(Qt.AlignCenter)
+        video_layout.addWidget(self.joint_angles_label)
+
+        # ROM status display area
+        self.rom_status_label = QLabel()
+        self.rom_status_label.setFixedSize(100, 100)
+        self.rom_status_label.setAlignment(Qt.AlignCenter)
+        self.rom_status_label.setStyleSheet("background-color: white;")
+        video_layout.addWidget(self.rom_status_label)
+
+        # Rep count display area
+        self.rep_count_label = QLabel("Reps: 0")
+        self.rep_count_label.setAlignment(Qt.AlignCenter)
+        video_layout.addWidget(self.rep_count_label)
 
         # Metrics display widget
         self.metrics_display = MetricsDisplayWidget()
@@ -98,7 +89,7 @@ class MainWindow(QMainWindow):
         self.exercise_selection.exercise_selected.connect(self.on_exercise_selected)
 
         # Add layouts to main layout
-        main_layout.addLayout(video_layout, 2)
+        main_layout.addLayout(video_layout, 3)
         main_layout.addWidget(self.exercise_selection, 1)
         central_widget.setLayout(main_layout)
 
@@ -111,8 +102,37 @@ class MainWindow(QMainWindow):
         self.video_thread.stop()
 
     def update_video_frame(self, qt_image):
-        # Update the displayed video frame
-        self.video_label.setPixmap(QPixmap.fromImage(qt_image))
+        # Scale the image to fit the QLabel
+        scaled_image = qt_image.scaled(self.video_label.size(), Qt.KeepAspectRatioByExpanding)
+        # Center the image in the QLabel
+        self.video_label.setPixmap(QPixmap.fromImage(scaled_image))
+
+    def update_joint_angles(self, joint_angles):
+        # Update the joint angles display
+        angles_text_lines = []
+        joints_to_display = ['left_elbow', 'right_elbow', 'left_knee', 'right_knee']
+        for joint in joints_to_display:
+            angle = joint_angles.get(joint)
+            if angle is not None:
+                angles_text_lines.append(f"{joint}: {angle:.2f}")
+            else:
+                angles_text_lines.append(f"{joint}: -")
+        angles_text = "\n".join(angles_text_lines)
+        self.joint_angles_label.setText(angles_text)
+
+    def update_rom_status(self, rom_status):
+        # Update the ROM status display
+        color_map = {
+            'white': 'white',
+            'yellow': 'yellow',
+            'light_green': 'lightgreen',
+            'dark_green': 'darkgreen'
+        }
+        self.rom_status_label.setStyleSheet(f"background-color: {color_map[rom_status]};")
+
+    def update_rep_count(self, rep_count):
+        # Update the rep count display
+        self.rep_count_label.setText(f"Reps: {rep_count}")
 
     def on_exercise_selected(self, exercise_type, skill_level):
         # Update the pose tracker with the selected exercise type and skill level
@@ -128,11 +148,45 @@ class MainWindow(QMainWindow):
         self.stop_session()
         event.accept()
 
-def main():
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec_())
+class VideoThread(QThread):
+    frame_updated = pyqtSignal(QImage)
+    joint_angles_updated = pyqtSignal(dict)
+    rom_status_updated = pyqtSignal(str)
+    rep_count_updated = pyqtSignal(int)
 
-if __name__ == "__main__":
-    main()
+    def __init__(self, pose_tracker):
+        super().__init__()
+        self.pose_tracker = pose_tracker
+        self.running = True
+
+    def run(self):
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            print("Error: Could not open video source.")
+            return
+
+        while self.running:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            frame, joint_angles, rom_status, rep_count = self.pose_tracker.process_frame(frame)
+
+            # Convert frame to QImage for display in PyQt5
+            rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            qt_image = QImage(rgb_image.data, rgb_image.shape[1], rgb_image.shape[0], QImage.Format_RGB888)
+            self.frame_updated.emit(qt_image)
+            self.joint_angles_updated.emit(joint_angles)
+            self.rom_status_updated.emit(rom_status)
+            self.rep_count_updated.emit(rep_count)
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+        
+        cap.release()
+        cv2.destroyAllWindows()
+
+    def stop(self):
+        self.running = False
+        self.quit()
+        self.wait()

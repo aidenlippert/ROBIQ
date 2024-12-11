@@ -3,9 +3,9 @@ import cv2
 
 class BlazePoseEstimator:
     def __init__(self, static_image_mode=False, model_complexity=2, enable_segmentation=False,
-                 min_detection_confidence=0.5, min_tracking_confidence=0.5):
+                 min_detection_confidence=0.5, min_tracking_confidence=0.7):
         self.static_image_mode = static_image_mode
-        self.model_complexity = model_complexity  # 0, 1, or 2
+        self.model_complexity = model_complexity
         self.enable_segmentation = enable_segmentation
         self.min_detection_confidence = min_detection_confidence
         self.min_tracking_confidence = min_tracking_confidence
