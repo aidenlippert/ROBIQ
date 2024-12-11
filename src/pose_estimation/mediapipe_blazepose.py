@@ -22,7 +22,13 @@ class BlazePoseEstimator:
         image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         # Process the image and detect the pose
         results = self.pose.process(image_rgb)
-        return results
+
+        # Check if landmarks are detected and are confident enough
+        if results.pose_landmarks and results.pose_landmarks.landmark:
+            # You can filter based on landmark confidence here if needed
+            return results.pose_landmarks
+        else:
+            return None
 
     def draw_landmarks(self, frame, results):
         # Draw pose landmarks on the frame
@@ -35,6 +41,13 @@ class BlazePoseEstimator:
                 self.mp_pose.POSE_CONNECTIONS,
                 landmark_drawing_spec=self.mp_drawing_styles.get_default_pose_landmarks_style())
         return frame
+
+    def get_landmark_confidence(self, results):
+        # You can check the confidence of the landmarks here
+        if results.pose_landmarks:
+            return [landmark.visibility for landmark in results.pose_landmarks.landmark]
+        else:
+            return None
 
     def close(self):
         # Release the MediaPipe resources
