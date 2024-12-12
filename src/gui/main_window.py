@@ -9,6 +9,9 @@ from .exercise_selection import ExerciseSelectionWidget
 from .settings import SettingsDialog
 from .metrics_display import MetricsDisplayWidget
 from pose_estimation.pose_tracker import PoseTracker
+from pose_estimation.pose_refiner import PoseRefiner
+from motion_analysis.motion_analyzer import MotionAnalyzer
+from symmetry_analysis.symmetry_analyzer import SymmetryAnalyzer
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -16,20 +19,25 @@ class MainWindow(QMainWindow):
         self.setWindowTitle('ROBIQ - AI Personal Trainer')
         self.setGeometry(100, 100, 1200, 600)  # Wider window to display all info
 
-        # Initialize Pose Tracker
+        # Initialize Pose Tracker and auxiliary components
         self.pose_tracker = PoseTracker()
+        self.pose_refiner = PoseRefiner()
+        self.motion_analyzer = MotionAnalyzer(window_size=5)
+        self.symmetry_analyzer = SymmetryAnalyzer()
 
         # Initialize UI components
         self.init_ui()
 
         # Initialize video thread
-        self.video_thread = VideoThread(self.pose_tracker)
+        self.video_thread = VideoThread(self.pose_tracker, self.pose_refiner, self.motion_analyzer, self.symmetry_analyzer)
         self.video_thread.frame_updated.connect(self.update_video_frame)
         self.video_thread.joint_angles_updated.connect(self.update_joint_angles)
         self.video_thread.rom_status_updated.connect(self.update_rom_status)
         self.video_thread.rep_count_updated.connect(self.update_rep_count)
         self.video_thread.activity_updated.connect(self.update_activity)
         self.video_thread.pose_similarity_updated.connect(self.update_pose_similarity)
+        self.video_thread.motion_metrics_updated.connect(self.update_motion_metrics)
+        self.video_thread.symmetry_scores_updated.connect(self.update_symmetry_scores)
 
     def init_ui(self):
         # Central widget
@@ -69,6 +77,16 @@ class MainWindow(QMainWindow):
         self.pose_similarity_label = QLabel("Pose Similarity: N/A")
         self.pose_similarity_label.setAlignment(Qt.AlignCenter)
         video_layout.addWidget(self.pose_similarity_label)
+
+        # Motion metrics display
+        self.motion_metrics_label = QLabel("Motion Metrics: N/A")
+        self.motion_metrics_label.setAlignment(Qt.AlignCenter)
+        video_layout.addWidget(self.motion_metrics_label)
+
+        # Symmetry scores display
+        self.symmetry_scores_label = QLabel("Symmetry Scores: N/A")
+        self.symmetry_scores_label.setAlignment(Qt.AlignCenter)
+        video_layout.addWidget(self.symmetry_scores_label)
 
         # Metrics display widget
         self.metrics_display = MetricsDisplayWidget()
@@ -129,6 +147,13 @@ class MainWindow(QMainWindow):
     def update_pose_similarity(self, similarity_score):
         self.pose_similarity_label.setText(f"Pose Similarity: {similarity_score:.2f}%")
 
+    def update_motion_metrics(self, motion_metrics):
+        self.motion_metrics_label.setText(f"Motion Metrics: {motion_metrics}")
+
+    def update_symmetry_scores(self, symmetry_scores):
+        symmetry_text = "\n".join([f"{joint}: {score:.2f}" for joint, score in symmetry_scores.items()])
+        self.symmetry_scores_label.setText(f"Symmetry Scores:\n{symmetry_text}")
+
     def on_exercise_selected(self, exercise_type, skill_level):
         self.pose_tracker.update_exercise(exercise_type, skill_level)
 
@@ -139,51 +164,3 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self.stop_session()
         event.accept()
-
-
-class VideoThread(QThread):
-    frame_updated = pyqtSignal(QImage)
-    joint_angles_updated = pyqtSignal(dict)
-    rom_status_updated = pyqtSignal(str)
-    rep_count_updated = pyqtSignal(int)
-    activity_updated = pyqtSignal(str)
-    pose_similarity_updated = pyqtSignal(float)
-
-    def __init__(self, pose_tracker):
-        super().__init__()
-        self.pose_tracker = pose_tracker
-        self.running = True
-
-    def run(self):
-        cap = cv2.VideoCapture(0)
-        if not cap.isOpened():
-            print("Error: Could not open video source.")
-            return
-
-        while self.running:
-            ret, frame = cap.read()
-            if not ret:
-                break
-
-            # Pose tracking and biomechanics calculations
-            processed_frame, joint_angles, rom_status, rep_count, activity, similarity_score = self.pose_tracker.process_frame(frame)
-
-            # Convert frame for PyQt display
-            rgb_image = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
-            qt_image = QImage(rgb_image.data, rgb_image.shape[1], rgb_image.shape[0], QImage.Format_RGB888)
-
-            # Emit signals for GUI updates
-            self.frame_updated.emit(qt_image)
-            self.joint_angles_updated.emit(joint_angles)
-            self.rom_status_updated.emit(rom_status)
-            self.rep_count_updated.emit(rep_count)
-            self.activity_updated.emit(activity)
-            self.pose_similarity_updated.emit(similarity_score)
-
-        cap.release()
-        cv2.destroyAllWindows()
-
-    def stop(self):
-        self.running = False
-        self.quit()
-        self.wait()
